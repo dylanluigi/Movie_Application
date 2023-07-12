@@ -6,22 +6,21 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 
+void main() {
+  runApp(MyApp());
+}
 
 class CustomCacheManager extends CacheManager with ImageCacheManager {
   static const key = 'customCacheKey';
 
   CustomCacheManager()
       : super(Config(
-          key,
-          stalePeriod: const Duration(days: 7),
-          maxNrOfCacheObjects: 100,
-        ));
+    key,
+    stalePeriod: const Duration(days: 7),
+    maxNrOfCacheObjects: 100,
+  ));
 
   static CustomCacheManager instance = CustomCacheManager();
-}
-
-void main() {
-  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -48,8 +47,9 @@ class HomePage extends StatefulWidget {
 
 class MovieDetailPage extends StatelessWidget {
   final Map<String, dynamic> movie;
+  final Future<String> trailerKey;
 
-  const MovieDetailPage({Key? key, required this.movie}) : super(key: key);
+  MovieDetailPage({Key? key, required this.movie, required this.trailerKey}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +87,26 @@ class MovieDetailPage extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
+            FutureBuilder<String>(
+              future: trailerKey,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.isNotEmpty) {
+                  return ElevatedButton(
+                    child: const Text('Watch Trailer'),
+                    onPressed: () async {
+                      final url = 'https://www.youtube.com/watch?v=${snapshot.data}';
+                      if (await canLaunch(url)) {
+                        await launch(url);
+                      } else {
+                        throw 'Could not launch $url';
+                      }
+                    },
+                  );
+                } else {
+                  return Container();
+                }
+              },
+            ),
           ],
         ),
       ),
@@ -94,11 +114,31 @@ class MovieDetailPage extends StatelessWidget {
   }
 }
 
+class MovieService {
+  final _client = http.Client();
+
+  Future<String> fetchTrailer(int movieId) async {
+
+    final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var result = json.decode(response.body);
+      for (var item in result['results']) {
+        if (item['type'] == 'Trailer' && item['site'] == 'YouTube') {
+          return item['key'];
+        }
+      }
+    }
+
+    return '';
+  }
+}
 
 class MovieGrid extends StatelessWidget {
   final List<dynamic> data;
-
-  MovieGrid({required this.data});
+  final movieService = MovieService();
+  final ScrollController scrollController;  // add this line
+  MovieGrid({required this.data, required this.scrollController});  // modify this line
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +146,7 @@ class MovieGrid extends StatelessWidget {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 1,
       ),
+      controller: scrollController,  // add this line
       itemCount: data.length,
       itemBuilder: (BuildContext context, int index) {
         return GestureDetector(
@@ -113,7 +154,10 @@ class MovieGrid extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => MovieDetailPage(movie: data[index]),
+                builder: (context) => MovieDetailPage(
+                  movie: data[index],
+                  trailerKey: movieService.fetchTrailer(data[index]['id']),
+                ),
               ),
             );
           },
@@ -149,8 +193,6 @@ class MovieGrid extends StatelessWidget {
   }
 }
 
-
-
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -163,6 +205,7 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
   List<dynamic> data = [];
+  final ScrollController _scrollController = ScrollController();
 
   Future<void> searchMovies(String query) async {
     try {
@@ -232,7 +275,7 @@ class _SearchPageState extends State<SearchPage> {
               },
             ),
           ),
-          Expanded(child: MovieGrid(data: data)),
+          Expanded(child: MovieGrid(data: data, scrollController: _scrollController)), // modify this line
         ],
       ),
     );
@@ -257,6 +300,23 @@ class _HomePageState extends State<HomePage> {
     });
     fetchData();
   }
+
+  Future<String> fetchTrailer(int movieId) async {
+
+    final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var result = json.decode(response.body);
+      for (var item in result['results']) {
+        if (item['type'] == 'Trailer' && item['site'] == 'YouTube') {
+          return item['key'];
+        }
+      }
+    }
+
+    return '';
+  }
+
 
   Future<void> fetchData() async {
     try {
@@ -285,11 +345,11 @@ class _HomePageState extends State<HomePage> {
         foregroundColor: Colors.black,
         title: const Text('Popular Movies'),
       ),
-      body: MovieGrid(data: data),
-            bottomNavigationBar: BottomNavigationBar(
-               backgroundColor: Colors.grey[900],
-               selectedItemColor: Colors.yellow,
-               unselectedItemColor: Colors.white,
+      body: MovieGrid(data: data, scrollController: _scrollController),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.grey[900],
+        selectedItemColor: Colors.yellow,
+        unselectedItemColor: Colors.white,
         currentIndex: currentIndex,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
@@ -317,4 +377,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
