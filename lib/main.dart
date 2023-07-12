@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=965bad903c50ad13e17d1c22af35845f';
+const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=965bad903c50ad13e17d1c22af35845f&query=';
 
 void main() {
   runApp(MyApp());
@@ -45,9 +47,28 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
+class Actor {
+  final String name;
+  final String imageUrl;
+
+  Actor({
+    required this.name,
+    required this.imageUrl,
+  });
+
+  factory Actor.fromJson(Map<String, dynamic> json) {
+    return Actor(
+      name: json['name'],
+      imageUrl: 'https://image.tmdb.org/t/p/w500/${json["profile_path"]}',
+    );
+  }
+}
+
+
 class MovieDetailPage extends StatelessWidget {
   final Map<String, dynamic> movie;
   final Future<String> trailerKey;
+  final MovieService movieService = MovieService(); // Initialize your movie service
 
   MovieDetailPage({Key? key, required this.movie, required this.trailerKey}) : super(key: key);
 
@@ -87,6 +108,48 @@ class MovieDetailPage extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
+            SizedBox(height: 16.0),
+            FutureBuilder<List<Actor>>(
+              future: movieService.fetchActors(movie['id']),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  if (snapshot.hasError) {
+                    return Text('Error: ${snapshot.error}');
+                  }
+                  final actors = snapshot.data ?? [];
+                  return Container(
+                    height: 130,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: actors.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                backgroundImage: NetworkImage(actors[index].imageUrl),
+                                radius: 40,
+                              ),
+                              SizedBox(height: 5),
+                              Text(
+                                actors[index].name,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }
+                return Center(child: CircularProgressIndicator());
+              },
+            ),
+            SizedBox(height: 16.0),
             FutureBuilder<String>(
               future: trailerKey,
               builder: (context, snapshot) {
@@ -116,9 +179,11 @@ class MovieDetailPage extends StatelessWidget {
 
 class MovieService {
   final _client = http.Client();
+  final String apiKey = '965bad903c50ad13e17d1c22af35845f';
+  final String baseUrl = 'https://api.themoviedb.org/3';
 
   Future<String> fetchTrailer(int movieId) async {
-
+     // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
 
     if (response.statusCode == 200) {
@@ -132,6 +197,21 @@ class MovieService {
 
     return '';
   }
+
+  Future<List<Actor>> fetchActors(int movieId) async {
+    final response = await http.get(Uri.parse('$baseUrl/movie/$movieId/credits?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var jsonResponse = jsonDecode(response.body);
+      List<dynamic> jsonActors = jsonResponse['cast'];
+
+      return jsonActors.map((json) => Actor.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to load actors');
+    }
+  }
+
+
 }
 
 class MovieGrid extends StatelessWidget {
@@ -302,7 +382,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<String> fetchTrailer(int movieId) async {
-
+    String apiKey = '965bad903c50ad13e17d1c22af35845f'; // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
 
     if (response.statusCode == 200) {
