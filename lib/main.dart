@@ -27,6 +27,7 @@ class CustomCacheManager extends CacheManager with ImageCacheManager {
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -215,7 +216,6 @@ class MovieService {
 
 }
 
-
 class MovieGrid extends StatelessWidget {
   final List<dynamic> data;
   final movieService = MovieService();
@@ -313,6 +313,7 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    String dropdownValue = DateTime.now().year.toString();
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.yellow,
@@ -332,11 +333,9 @@ class _SearchPageState extends State<SearchPage> {
             onChanged: (String? newValue) {
               setState(() {
                 dropdownValue = newValue!;
-                // re-run the search whenever the filter changes
-                searchMovies(_controller.text);
               });
             },
-            items: <String>['5.0', '6.0', '7.0', '8.0', '9.0']
+            items: <String>['1990', '1991', '1992', '1993', '1994', '1995', '1996', '1997', '1998', '1999', '2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019', '2020', '2021', '2022', '2023']
                 .map<DropdownMenuItem<String>>((String value) {
               return DropdownMenuItem<String>(
                 value: value,
