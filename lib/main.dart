@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -63,7 +64,6 @@ class Actor {
     );
   }
 }
-
 
 class MovieDetailPage extends StatelessWidget {
   final Map<String, dynamic> movie;
@@ -212,7 +212,9 @@ class MovieService {
   }
 
 
+
 }
+
 
 class MovieGrid extends StatelessWidget {
   final List<dynamic> data;
@@ -281,18 +283,27 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  String dropdownValue = 'Filter1';
+  String dropdownValue = '5.0';  // default value for rating filter
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
   List<dynamic> data = [];
   final ScrollController _scrollController = ScrollController();
+  DateTime selectedDate = DateTime.now();
 
   Future<void> searchMovies(String query) async {
     try {
       if (query.isNotEmpty) {
         final response = await _client.get(Uri.parse("$searchBaseUrl$query"));
+        List<dynamic> allData = json.decode(response.body)['results'];
+
+        // Apply the filters
         setState(() {
-          data = json.decode(response.body)['results'];
+          data = allData.where((movie) {
+            final releaseYear = DateTime.parse(movie['release_date']).year;
+            final rating = double.parse(movie['vote_average'].toString());
+
+            return releaseYear >= selectedDate.year && rating >= double.parse(dropdownValue);
+          }).toList();
         });
       }
     } catch (e) {
@@ -321,15 +332,37 @@ class _SearchPageState extends State<SearchPage> {
             onChanged: (String? newValue) {
               setState(() {
                 dropdownValue = newValue!;
+                // re-run the search whenever the filter changes
+                searchMovies(_controller.text);
               });
             },
-            items: <String>['Filter1', 'Filter2', 'Filter3', 'Filter4']
+            items: <String>['5.0', '6.0', '7.0', '8.0', '9.0']
                 .map<DropdownMenuItem<String>>((String value) {
               return DropdownMenuItem<String>(
                 value: value,
                 child: Text(value),
               );
             }).toList(),
+          ),
+          IconButton(
+            icon: Icon(Icons.calendar_today),
+            onPressed: () {
+              showDatePicker(
+                context: context,
+                initialDate: selectedDate,
+                firstDate: DateTime(1800),
+                lastDate: DateTime.now(),
+              ).then((date) {
+                if (date != null) {
+                  setState(() {
+                    selectedDate = date;
+                    // re-run the search whenever the filter changes
+                    searchMovies(_controller.text);
+                  });
+                }
+              });
+            },
+            tooltip: 'Filter by year',
           ),
         ],
       ),
