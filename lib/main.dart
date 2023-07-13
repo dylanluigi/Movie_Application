@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -9,11 +10,6 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=965bad903c50ad13e17d1c22af35845f';
 const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=965bad903c50ad13e17d1c22af35845f&query=';
-
-void main() {
-  runApp(MyApp());
-  fetchGenreMapping();
-}
 
 Map<String, int> genreNameToId = {};
 
@@ -42,8 +38,15 @@ class CustomCacheManager extends CacheManager with ImageCacheManager {
   static CustomCacheManager instance = CustomCacheManager();
 }
 
+void main() {
+  runApp(MaterialApp(
+    home: MyApp(),
+  ));
+}
+
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -59,7 +62,7 @@ class MyApp extends StatelessWidget {
 }
 
 class HomePage extends StatefulWidget {
-  HomePage({Key? key}) : super(key: key);
+  const HomePage({Key? key}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -99,34 +102,15 @@ class MovieDetailPage extends StatelessWidget {
         title: Text(movie['title']),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: double.infinity,
-              height: MediaQuery.of(context).size.height * 0.65 , // Adjust the height here
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage(
-                    'https://image.tmdb.org/t/p/w500/${movie["poster_path"]}',
-                  ),
-                  fit: BoxFit.fitWidth,
-                ),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-            SizedBox(height: 16.0),
-            Text(
-              movie['title'],
-              style: TextStyle(
-                color: Colors.amber,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 8.0),
-            Text(
+            MovieImage(movie: movie),
+            const SizedBox(height: 16.0),
+            MovieTitle(movie: movie),
+            const SizedBox(height: 8.0),
+            const Text(
               'Genres:',
               style: TextStyle(
                 color: Colors.white,
@@ -134,123 +118,244 @@ class MovieDetailPage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 4.0),
-            FutureBuilder<List<String>>(
-              future: movieService.fetchGenres(movie['id']),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
-                  final genres = snapshot.data!;
-                  return Wrap(
-                    spacing: 8.0,
-                    runSpacing: 4.0,
-                    children: genres
-                        .map(
-                          (genre) => Chip(
-                        label: Text(
-                          genre,
-                          style: TextStyle(
-                            color: Colors.white,
-                          ),
-                        ),
-                        backgroundColor: Colors.amber,
-                      ),
-                    )
-                        .toList(),
-                  );
-                } else {
-                  return Text(
-                    'Loading genres...',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 16,
-                    ),
-                  );
-                }
-              },
-            ),
-            SizedBox(height: 16.0),
-            Text(
-              'Release Date: ${movie['release_date']}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-            SizedBox(height: 16.0),
-            Text(
-              movie['overview'],
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-            SizedBox(height: 16.0),
-            FutureBuilder<List<Actor>>(
-              future: movieService.fetchActors(movie['id']),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  if (snapshot.hasError) {
-                    return Text('Error: ${snapshot.error}');
-                  }
-                  final actors = snapshot.data ?? [];
-                  return Container(
-                    height: 130,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: actors.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              CircleAvatar(
-                                backgroundImage: NetworkImage(actors[index].imageUrl),
-                                radius: 40,
-                              ),
-                              SizedBox(height: 5),
-                              Text(
-                                actors[index].name,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                }
-                return Center(child: CircularProgressIndicator());
-              },
-            ),
-            SizedBox(height: 16.0),
-            FutureBuilder<String>(
-              future: trailerKey,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.isNotEmpty) {
-                  final youtubePlayerController = YoutubePlayerController(
-                    initialVideoId: snapshot.data!,
-                    flags: YoutubePlayerFlags(
-                      autoPlay: false,
-                      mute: false,
-                    ),
-                  );
-                  return YoutubePlayer(
-                    controller: youtubePlayerController,
-                    showVideoProgressIndicator: true,
-                    progressIndicatorColor: Colors.amber,
-                  );
-                } else {
-                  return Container();
-                }
-              },
-            ),
+            const SizedBox(height: 4.0),
+            GenresBuilder(movieService: movieService, movie: movie),
+            const SizedBox(height: 16.0),
+            MovieReleaseDate(movie: movie),
+            const SizedBox(height: 16.0),
+            MovieOverview(movie: movie),
+            const SizedBox(height: 16.0),
+            ActorsBuilder(movieService: movieService, movie: movie),
+            const SizedBox(height: 16.0),
+            TrailerBuilder(trailerKey: trailerKey),
           ],
         ),
       ),
+    );
+  }
+}
+
+class MovieImage extends StatelessWidget {
+  const MovieImage({
+    Key? key,
+    required this.movie,
+  }) : super(key: key);
+
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: MediaQuery.of(context).size.height * 0.65,
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: NetworkImage(
+            'https://image.tmdb.org/t/p/w500/${movie["poster_path"]}',
+          ),
+          fit: BoxFit.fitWidth,
+        ),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+    );
+  }
+}
+
+class MovieTitle extends StatelessWidget {
+  const MovieTitle({
+    Key? key,
+    required this.movie,
+  }) : super(key: key);
+
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      movie['title'],
+      style: const TextStyle(
+        color: Colors.amber,
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+}
+
+class GenresBuilder extends StatelessWidget {
+  const GenresBuilder({
+    Key? key,
+    required this.movieService,
+    required this.movie,
+  }) : super(key: key);
+
+  final MovieService movieService;
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<String>>(
+      future: movieService.fetchGenres(movie['id']),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+          final genres = snapshot.data!;
+          return Wrap(
+            spacing: 8.0,
+            runSpacing: 4.0,
+            children: genres
+                .map(
+                  (genre) => Chip(
+                label: Text(
+                  genre,
+                  style: const TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
+                backgroundColor: Colors.amber,
+              ),
+            )
+                .toList(),
+          );
+        } else {
+          return const Text(
+            'Loading genres...',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 16,
+            ),
+          );
+        }
+      },
+    );
+  }
+}
+
+class MovieReleaseDate extends StatelessWidget {
+  const MovieReleaseDate({
+    Key? key,
+    required this.movie,
+  }) : super(key: key);
+
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Release Date: ${movie['release_date']}',
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        fontSize: 16,
+      ),
+    );
+  }
+}
+
+class MovieOverview extends StatelessWidget {
+  const MovieOverview({
+    Key? key,
+    required this.movie,
+  }) : super(key: key);
+
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      movie['overview'],
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+      ),
+    );
+  }
+}
+
+class ActorsBuilder extends StatelessWidget {
+  const ActorsBuilder({
+    Key? key,
+    required this.movieService,
+    required this.movie,
+  }) : super(key: key);
+
+  final MovieService movieService;
+  final Map<String, dynamic> movie;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Actor>>(
+      future: movieService.fetchActors(movie['id']),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          if (snapshot.hasError) {
+            return Text('Error: ${snapshot.error}');
+          }
+          final actors = snapshot.data ?? [];
+          return Container(
+            height: 130,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: actors.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: NetworkImage(actors[index].imageUrl),
+                        radius: 40,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        actors[index].name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+  }
+}
+
+class TrailerBuilder extends StatelessWidget {
+  const TrailerBuilder({
+    Key? key,
+    required this.trailerKey,
+  }) : super(key: key);
+
+  final Future<String> trailerKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: trailerKey,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final youtubePlayerController = YoutubePlayerController(
+            initialVideoId: snapshot.data!,
+            flags: const YoutubePlayerFlags(
+              autoPlay: false,
+              mute: false,
+            ),
+          );
+          return YoutubePlayer(
+            controller: youtubePlayerController,
+            showVideoProgressIndicator: true,
+            progressIndicatorColor: Colors.amber,
+          );
+        } else {
+          return Container();
+        }
+      },
     );
   }
 }
@@ -290,9 +395,7 @@ class MovieService {
     }
   }
 
-
   Future<String> fetchTrailer(int movieId) async {
-     // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
 
     if (response.statusCode == 200) {
@@ -319,16 +422,13 @@ class MovieService {
       throw Exception('Failed to load actors');
     }
   }
-
-
-
 }
 
 class MovieGrid extends StatelessWidget {
   final List<dynamic> data;
-  final movieService = MovieService();
-  final ScrollController scrollController;  // add this line
-  MovieGrid({required this.data, required this.scrollController});  // modify this line
+  final ScrollController scrollController;
+
+  const MovieGrid({required this.data, required this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -336,7 +436,7 @@ class MovieGrid extends StatelessWidget {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 1,
       ),
-      controller: scrollController,  // add this line
+      controller: scrollController,
       itemCount: data.length,
       itemBuilder: (BuildContext context, int index) {
         return GestureDetector(
@@ -346,39 +446,50 @@ class MovieGrid extends StatelessWidget {
               MaterialPageRoute(
                 builder: (context) => MovieDetailPage(
                   movie: data[index],
-                  trailerKey: movieService.fetchTrailer(data[index]['id']),
+                  trailerKey: MovieService().fetchTrailer(data[index]['id']),
                 ),
               ),
             );
           },
-          child: Card(
-            color: const Color.fromARGB(255, 53, 52, 52),
-            child: Column(
-              children: <Widget>[
-                Expanded(
-                  child: CachedNetworkImage(
-                    imageUrl: 'https://image.tmdb.org/t/p/w500/${data[index]["poster_path"]}',
-                    placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
-                    fit: BoxFit.cover,
-                    cacheManager: CustomCacheManager.instance,
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text(
-                    data[index]["title"],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: MovieCard(movie: data[index]),
         );
       },
+    );
+  }
+}
+
+class MovieCard extends StatelessWidget {
+  final dynamic movie;
+
+  const MovieCard({required this.movie});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color.fromARGB(255, 53, 52, 52),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: CachedNetworkImage(
+              imageUrl: 'https://image.tmdb.org/t/p/w500/${movie["poster_path"]}',
+              placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+              errorWidget: (context, url, error) => const Icon(Icons.error),
+              fit: BoxFit.cover,
+              cacheManager: CustomCacheManager.instance,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              movie["title"],
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -388,6 +499,13 @@ class SearchPage extends StatefulWidget {
 
   @override
   _SearchPageState createState() => _SearchPageState();
+}
+
+class RandomMoviePage extends StatefulWidget {
+  const RandomMoviePage({Key? key}) : super(key: key);
+
+  @override
+  _RandomMoviePageState createState() => _RandomMoviePageState();
 }
 
 class _SearchPageState extends State<SearchPage> {
@@ -421,7 +539,6 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-
   @override
   void initState() {
     super.initState();
@@ -446,50 +563,43 @@ class _SearchPageState extends State<SearchPage> {
     List<String> genres = genreNameToId.keys.toList();
     genres.insert(0, 'All');
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.yellow,
-        foregroundColor: Colors.black,
-        title: Text('Search'),
-        actions: [
-          DropdownButton<String>(
-            value: selectedYear,
-            items: years.map((year) => DropdownMenuItem<String>(value: year, child: Text(year))).toList(),
-            onChanged: (newValue) {
-              setState(() {
-                selectedYear = newValue!;
-                searchMovies(_controller.text);
-              });
-            },
-          ),
-          DropdownButton<String>(
-            value: selectedGenre,
-            items: genres.map((genre) => DropdownMenuItem<String>(value: genre, child: Text(genre))).toList(),
-            onChanged: (newValue) {
-              setState(() {
-                selectedGenre = newValue!;
-                searchMovies(_controller.text);
-              });
-            },
-          ),
-        ],
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: CupertinoColors.systemYellow,
+        middle: Text('Search'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoPicker(
+              itemExtent: 32.0,
+              onSelectedItemChanged: (index) {
+                setState(() {
+                  selectedYear = years[index];
+                  searchMovies(_controller.text);
+                });
+              },
+              children: years.map((year) => Text(year)).toList(),
+            ),
+            SizedBox(width: 8.0),
+            CupertinoPicker(
+              itemExtent: 32.0,
+              onSelectedItemChanged: (index) {
+                setState(() {
+                  selectedGenre = genres[index];
+                  searchMovies(_controller.text);
+                });
+              },
+              children: genres.map((genre) => Text(genre)).toList(),
+            ),
+          ],
+        ),
       ),
-      body: Column(
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: TextField(
+            child: CupertinoSearchTextField(
               controller: _controller,
-              decoration: const InputDecoration(
-                labelText: "Search",
-                hintText: "Search",
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(
-                    Radius.circular(25.0),
-                  ),
-                ),
-              ),
             ),
           ),
           Expanded(child: MovieGrid(data: data, scrollController: _scrollController)),
@@ -534,7 +644,6 @@ class _HomePageState extends State<HomePage> {
     return '';
   }
 
-
   Future<void> fetchData() async {
     try {
       final response = await _client.get(Uri.parse("$baseUrl&page=$currentPage"));
@@ -556,61 +665,67 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.yellow,
-        foregroundColor: Colors.black,
-        title: const Text('Popular Movies'),
-      ),
-      body: MovieGrid(data: data, scrollController: _scrollController),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.grey[900],
-        selectedItemColor: Colors.yellow,
-        unselectedItemColor: Colors.white,
-        currentIndex: currentIndex,
+    return CupertinoTabScaffold(
+      tabBar: CupertinoTabBar(
+        backgroundColor: CupertinoColors.darkBackgroundGray,
+        activeColor: CupertinoColors.systemYellow,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
-            icon: Icon(Icons.movie),
+            icon: Icon(CupertinoIcons.film),
             label: 'Movies',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search),
+            icon: Icon(CupertinoIcons.search),
             label: 'Search',
           ),
-          BottomNavigationBarItem( // New navigation item
-            icon: Icon(Icons.shuffle),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.shuffle),
             label: 'Random',
           ),
         ],
-        onTap: (index) {
-          setState(() {
-            currentIndex = index;
-            if (index == 1) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SearchPage(),
-                ),
-              );
-            } else if (index == 2) { // New condition for random movie
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const RandomMoviePage(),
-                ),
-              );
-            }
-          });
-        },
       ),
-
+      tabBuilder: (BuildContext context, int index) {
+        switch (index) {
+          case 0:
+            return CupertinoTabView(
+              builder: (context) {
+                return CupertinoPageScaffold(
+                  navigationBar: CupertinoNavigationBar(
+                    backgroundColor: CupertinoColors.systemYellow,
+                    middle: const Text('Popular Movies'),
+                  ),
+                  child: MovieGrid(data: data, scrollController: _scrollController),
+                );
+              },
+            );
+          case 1:
+            return CupertinoTabView(
+              builder: (context) {
+                return const SearchPage();
+              },
+            );
+          case 2:
+            return CupertinoTabView(
+              builder: (context) {
+                return const RandomMoviePage();
+              },
+            );
+          default:
+            return CupertinoTabView(
+              builder: (context) {
+                return CupertinoPageScaffold(
+                  navigationBar: CupertinoNavigationBar(
+                    backgroundColor: CupertinoColors.systemYellow,
+                    middle: const Text('Popular Movies'),
+                  ),
+                  child: MovieGrid(data: data, scrollController: _scrollController),
+                );
+              },
+            );
+        }
+      },
     );
   }
-}
-
-class RandomMoviePage extends StatefulWidget {
-  const RandomMoviePage({Key? key}) : super(key: key);
-
-  @override
-  _RandomMoviePageState createState() => _RandomMoviePageState();
 }
 
 class _RandomMoviePageState extends State<RandomMoviePage> {
@@ -635,12 +750,23 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (movie == null) {
-      return Center(child: CircularProgressIndicator());
-    } else {
-      return MovieDetailPage(movie: movie!, trailerKey: Future.value(trailerKey));
-    }
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: CupertinoColors.systemYellow,
+        middle: const Text('Random Movie'),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Icon(CupertinoIcons.shuffle, size: 28),
+          onPressed: fetchRandomMovie,
+        ),
+      ),
+      child: movie == null
+          ? const Center(child: CupertinoActivityIndicator())
+          : MovieDetailPage(movie: movie!, trailerKey: Future.value(trailerKey)),
+    );
   }
 }
+
+
 
 
