@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:collection';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -364,6 +365,8 @@ class MovieService {
   final _client = http.Client();
   final String apiKey = '965bad903c50ad13e17d1c22af35845f';
   final String baseUrl = 'https://api.themoviedb.org/3';
+  Set<int> previousMovieIds;
+  MovieService() : previousMovieIds = Set<int>();
 
   Future<List<String>> fetchGenres(int movieId) async {
     final response = await http.get(Uri.parse('$baseUrl/movie/$movieId?api_key=$apiKey'));
@@ -377,23 +380,61 @@ class MovieService {
     }
   }
 
-  Future<Map<String, dynamic>> fetchRandomMovie() async {
-    final response = await _client.get(Uri.parse('$baseUrl/discover/movie?api_key=$apiKey'));
+  Future<List<Map<String, dynamic>>> fetchMovieList(int page) async {
+    String apiKey = '965bad903c50ad13e17d1c22af35845f'; // replace with your own API key
+    final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/popular?api_key=$apiKey&page=$page'));
+
+    if (response.statusCode == 200) {
+      List<dynamic> results = json.decode(response.body)['results'];
+      return results.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception('Failed to load movies');
+    }
+  }
+
+
+  Future<Map<String, dynamic>> fetchRandomMovie({String? genre, String? year, String? minimumRating}) async {
+    String apiUrl = '$baseUrl/discover/movie?api_key=$apiKey';
+
+    if (genre != null) {
+      apiUrl += '&with_genres=${genreNameToId[genre]}';
+    }
+
+    if (year != null) {
+      apiUrl += '&primary_release_year=$year';
+    }
+
+    if (minimumRating != null) {
+      apiUrl += '&vote_average.gte=$minimumRating';
+    }
+
+    final response = await _client.get(Uri.parse(apiUrl));
 
     if (response.statusCode == 200) {
       var jsonResponse = jsonDecode(response.body);
       List<dynamic> allMovies = jsonResponse['results'];
-      var movie = allMovies[Random().nextInt(allMovies.length)];
 
-      // fetch genres
-      var genres = await fetchGenres(movie['id']);
-      movie['genres'] = genres;
+      if (allMovies.isNotEmpty) {
+        var movie = allMovies[Random().nextInt(allMovies.length)];
 
-      return movie;
-    } else {
-      throw Exception('Failed to load random movie');
+        // Check if movie has been fetched before, if so, fetch another
+        while(previousMovieIds.contains(movie['id'])) {
+          movie = allMovies[Random().nextInt(allMovies.length)];
+        }
+        previousMovieIds.add(movie['id']); // Add movie to previously fetched movies
+
+        // fetch genres
+        var genres = await fetchGenres(movie['id']);
+        movie['genres'] = genres;
+
+        return movie;
+      }
     }
+
+
+    throw Exception('Failed to load random movie');
   }
+
 
   Future<String> fetchTrailer(int movieId) async {
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
@@ -740,13 +781,22 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
   }
 
   void fetchRandomMovie() async {
-    var randomMovie = await movieService.fetchRandomMovie();
-    var trailer = await movieService.fetchTrailer(randomMovie['id']);
-    setState(() {
-      movie = randomMovie;
-      trailerKey = trailer;
-    });
+    // Randomly generate a page number
+    var randomPage = Random().nextInt(500); // 500 can be replaced by the maximum number of pages you know exists in TMDB
+    var randomMovieList = await movieService.fetchMovieList(randomPage);
+
+    if (randomMovieList != null && randomMovieList.isNotEmpty) {
+      // Randomly select a movie from the list
+      var randomMovie = randomMovieList[Random().nextInt(randomMovieList.length)];
+      var trailer = await movieService.fetchTrailer(randomMovie['id']);
+
+      setState(() {
+        movie = randomMovie;
+        trailerKey = trailer;
+      });
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
