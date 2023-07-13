@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=965bad903c50ad13e17d1c22af35845f';
 const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=965bad903c50ad13e17d1c22af35845f&query=';
@@ -169,6 +170,15 @@ class MovieDetailPage extends StatelessWidget {
             ),
             SizedBox(height: 16.0),
             Text(
+              'Release Date: ${movie['release_date']}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 16,
+              ),
+            ),
+            SizedBox(height: 16.0),
+            Text(
               movie['overview'],
               style: TextStyle(
                 color: Colors.white,
@@ -221,16 +231,17 @@ class MovieDetailPage extends StatelessWidget {
               future: trailerKey,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data!.isNotEmpty) {
-                  return ElevatedButton(
-                    child: const Text('Watch Trailer'),
-                    onPressed: () async {
-                      final url = 'https://www.youtube.com/watch?v=${snapshot.data}';
-                      if (await canLaunch(url)) {
-                        await launch(url);
-                      } else {
-                        throw 'Could not launch $url';
-                      }
-                    },
+                  final youtubePlayerController = YoutubePlayerController(
+                    initialVideoId: snapshot.data!,
+                    flags: YoutubePlayerFlags(
+                      autoPlay: false,
+                      mute: false,
+                    ),
+                  );
+                  return YoutubePlayer(
+                    controller: youtubePlayerController,
+                    showVideoProgressIndicator: true,
+                    progressIndicatorColor: Colors.amber,
                   );
                 } else {
                   return Container();
