@@ -1,7 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -11,6 +11,21 @@ const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=965bad9
 
 void main() {
   runApp(MyApp());
+  fetchGenreMapping();
+}
+
+Map<String, int> genreNameToId = {};
+
+Future<void> fetchGenreMapping() async {
+  final response = await http.get(Uri.parse('https://api.themoviedb.org/3/genre/movie/list?api_key=965bad903c50ad13e17d1c22af35845f'));
+
+  if (response.statusCode == 200) {
+    final jsonResponse = json.decode(response.body);
+    final List<dynamic> genresJson = jsonResponse['genres'];
+    genresJson.forEach((genre) {
+      genreNameToId[genre['name']] = genre['id'];
+    });
+  }
 }
 
 class CustomCacheManager extends CacheManager with ImageCacheManager {
@@ -183,6 +198,20 @@ class MovieService {
   final String apiKey = '965bad903c50ad13e17d1c22af35845f';
   final String baseUrl = 'https://api.themoviedb.org/3';
 
+  Future<Map<String, dynamic>> fetchRandomMovie() async {
+    final response = await _client.get(Uri.parse('$baseUrl/discover/movie?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var jsonResponse = jsonDecode(response.body);
+      List<dynamic> allMovies = jsonResponse['results'];
+      return allMovies[Random().nextInt(allMovies.length)];
+    } else {
+      throw Exception('Failed to load random movie');
+    }
+  }
+
+
+
   Future<String> fetchTrailer(int movieId) async {
      // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
@@ -276,19 +305,19 @@ class MovieGrid extends StatelessWidget {
 }
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+  const SearchPage({Key? key}) : super(key: key);
 
   @override
   _SearchPageState createState() => _SearchPageState();
 }
 
 class _SearchPageState extends State<SearchPage> {
-  String dropdownValue = '5.0';  // default value for rating filter
+  String selectedYear = 'All';  // set default value for year filter to 'All'
+  String selectedGenre = 'All'; // set default value for genre filter to 'All'
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
   List<dynamic> data = [];
   final ScrollController _scrollController = ScrollController();
-  DateTime selectedDate = DateTime.now();
 
   Future<void> searchMovies(String query) async {
     try {
@@ -299,10 +328,12 @@ class _SearchPageState extends State<SearchPage> {
         // Apply the filters
         setState(() {
           data = allData.where((movie) {
-            final releaseYear = DateTime.parse(movie['release_date']).year;
-            final rating = double.parse(movie['vote_average'].toString());
+            final releaseYear = movie['release_date'].isNotEmpty ? DateTime.parse(movie['release_date']).year : null;
+            final genreIds = movie['genre_ids'] as List<dynamic>;
 
-            return releaseYear >= selectedDate.year && rating >= double.parse(dropdownValue);
+            // Checks if the movie's release year is equal or later than the selected year and if the movie's genres contain the selected genre
+            return (selectedYear == 'All' || (releaseYear != null && releaseYear >= int.parse(selectedYear))) &&
+                (selectedGenre == 'All' || genreIds.contains(genreNameToId[selectedGenre]));
           }).toList();
         });
       }
@@ -311,9 +342,31 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller.addListener(() {
+      searchMovies(_controller.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _client.close();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    String dropdownValue = DateTime.now().year.toString();
+    List<String> years = List<String>.generate(DateTime.now().year - 1990 + 1, (i) => (1990 + i).toString());
+    years.insert(0, 'All');
+
+    List<String> genres = genreNameToId.keys.toList();
+    genres.insert(0, 'All');
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.yellow,
@@ -321,47 +374,24 @@ class _SearchPageState extends State<SearchPage> {
         title: Text('Search'),
         actions: [
           DropdownButton<String>(
-            value: dropdownValue,
-            icon: const Icon(Icons.arrow_downward),
-            iconSize: 24,
-            elevation: 16,
-            style: const TextStyle(color: Colors.black),
-            underline: Container(
-              height: 2,
-              color: Colors.black,
-            ),
-            onChanged: (String? newValue) {
+            value: selectedYear,
+            items: years.map((year) => DropdownMenuItem<String>(value: year, child: Text(year))).toList(),
+            onChanged: (newValue) {
               setState(() {
-                dropdownValue = newValue!;
+                selectedYear = newValue!;
+                searchMovies(_controller.text);
               });
             },
-            items: <String>['1990', '1991', '1992', '1993', '1994', '1995', '1996', '1997', '1998', '1999', '2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019', '2020', '2021', '2022', '2023']
-                .map<DropdownMenuItem<String>>((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(value),
-              );
-            }).toList(),
           ),
-          IconButton(
-            icon: Icon(Icons.calendar_today),
-            onPressed: () {
-              showDatePicker(
-                context: context,
-                initialDate: selectedDate,
-                firstDate: DateTime(1800),
-                lastDate: DateTime.now(),
-              ).then((date) {
-                if (date != null) {
-                  setState(() {
-                    selectedDate = date;
-                    // re-run the search whenever the filter changes
-                    searchMovies(_controller.text);
-                  });
-                }
+          DropdownButton<String>(
+            value: selectedGenre,
+            items: genres.map((genre) => DropdownMenuItem<String>(value: genre, child: Text(genre))).toList(),
+            onChanged: (newValue) {
+              setState(() {
+                selectedGenre = newValue!;
+                searchMovies(_controller.text);
               });
             },
-            tooltip: 'Filter by year',
           ),
         ],
       ),
@@ -381,13 +411,9 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                 ),
               ),
-              onChanged: (value) {
-                // perform the search operation
-                searchMovies(value);
-              },
             ),
           ),
-          Expanded(child: MovieGrid(data: data, scrollController: _scrollController)), // modify this line
+          Expanded(child: MovieGrid(data: data, scrollController: _scrollController)),
         ],
       ),
     );
@@ -472,6 +498,10 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.search),
             label: 'Search',
           ),
+          BottomNavigationBarItem( // New navigation item
+            icon: Icon(Icons.shuffle),
+            label: 'Random',
+          ),
         ],
         onTap: (index) {
           setState(() {
@@ -482,10 +512,56 @@ class _HomePageState extends State<HomePage> {
                   builder: (_) => const SearchPage(),
                 ),
               );
+            } else if (index == 2) { // New condition for random movie
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RandomMoviePage(),
+                ),
+              );
             }
           });
         },
       ),
+
     );
   }
 }
+
+class RandomMoviePage extends StatefulWidget {
+  const RandomMoviePage({Key? key}) : super(key: key);
+
+  @override
+  _RandomMoviePageState createState() => _RandomMoviePageState();
+}
+
+class _RandomMoviePageState extends State<RandomMoviePage> {
+  final MovieService movieService = MovieService();
+  Map<String, dynamic>? movie;
+  String? trailerKey;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchRandomMovie();
+  }
+
+  void fetchRandomMovie() async {
+    var randomMovie = await movieService.fetchRandomMovie();
+    var trailer = await movieService.fetchTrailer(randomMovie['id']);
+    setState(() {
+      movie = randomMovie;
+      trailerKey = trailer;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (movie == null) {
+      return Center(child: CircularProgressIndicator());
+    } else {
+      return MovieDetailPage(movie: movie!, trailerKey: Future.value(trailerKey));
+    }
+  }
+}
+
+
