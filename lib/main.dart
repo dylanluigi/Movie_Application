@@ -84,9 +84,10 @@ class Actor {
 class MovieDetailPage extends StatelessWidget {
   final Map<String, dynamic> movie;
   final Future<String> trailerKey;
-  final MovieService movieService = MovieService(); // Initialize your movie service
+  final MovieService movieService = MovieService();
 
-  MovieDetailPage({Key? key, required this.movie, required this.trailerKey}) : super(key: key);
+  MovieDetailPage({Key? key, required this.movie, required this.trailerKey})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -99,13 +100,20 @@ class MovieDetailPage extends StatelessWidget {
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CachedNetworkImage(
-              imageUrl: 'https://image.tmdb.org/t/p/w500/${movie["poster_path"]}',
-              placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-              errorWidget: (context, url, error) => const Icon(Icons.error),
-              fit: BoxFit.cover,
-              cacheManager: CustomCacheManager.instance,
+            Container(
+              width: double.infinity,
+              height: MediaQuery.of(context).size.height * 0.65 , // Adjust the height here
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: NetworkImage(
+                    'https://image.tmdb.org/t/p/w500/${movie["poster_path"]}',
+                  ),
+                  fit: BoxFit.fitWidth,
+                ),
+                borderRadius: BorderRadius.circular(8.0),
+              ),
             ),
             SizedBox(height: 16.0),
             Text(
@@ -116,11 +124,54 @@ class MovieDetailPage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            SizedBox(height: 8.0),
+            Text(
+              'Genres:',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 4.0),
+            FutureBuilder<List<String>>(
+              future: movieService.fetchGenres(movie['id']),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+                  final genres = snapshot.data!;
+                  return Wrap(
+                    spacing: 8.0,
+                    runSpacing: 4.0,
+                    children: genres
+                        .map(
+                          (genre) => Chip(
+                        label: Text(
+                          genre,
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                        ),
+                        backgroundColor: Colors.amber,
+                      ),
+                    )
+                        .toList(),
+                  );
+                } else {
+                  return Text(
+                    'Loading genres...',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 16,
+                    ),
+                  );
+                }
+              },
+            ),
             SizedBox(height: 16.0),
             Text(
               movie['overview'],
               style: TextStyle(
-                color: Colors.white54,
+                color: Colors.white,
                 fontSize: 16,
               ),
             ),
@@ -198,18 +249,35 @@ class MovieService {
   final String apiKey = '965bad903c50ad13e17d1c22af35845f';
   final String baseUrl = 'https://api.themoviedb.org/3';
 
+  Future<List<String>> fetchGenres(int movieId) async {
+    final response = await http.get(Uri.parse('$baseUrl/movie/$movieId?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var jsonResponse = jsonDecode(response.body);
+      List<dynamic> genreIds = jsonResponse['genres'];
+      return genreIds.map((json) => json['name'].toString()).toList();
+    } else {
+      throw Exception('Failed to load genres');
+    }
+  }
+
   Future<Map<String, dynamic>> fetchRandomMovie() async {
     final response = await _client.get(Uri.parse('$baseUrl/discover/movie?api_key=$apiKey'));
 
     if (response.statusCode == 200) {
       var jsonResponse = jsonDecode(response.body);
       List<dynamic> allMovies = jsonResponse['results'];
-      return allMovies[Random().nextInt(allMovies.length)];
+      var movie = allMovies[Random().nextInt(allMovies.length)];
+
+      // fetch genres
+      var genres = await fetchGenres(movie['id']);
+      movie['genres'] = genres;
+
+      return movie;
     } else {
       throw Exception('Failed to load random movie');
     }
   }
-
 
 
   Future<String> fetchTrailer(int movieId) async {
