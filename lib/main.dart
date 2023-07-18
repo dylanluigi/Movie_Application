@@ -3,19 +3,20 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:collection';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'secrets.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
-const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=965bad903c50ad13e17d1c22af35845f';
-const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=965bad903c50ad13e17d1c22af35845f&query=';
+const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=${Secrets.API_KEY}';
+const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=${Secrets.API_KEY}&query=';
 
 Map<String, int> genreNameToId = {};
 
 Future<void> fetchGenreMapping() async {
-  final response = await http.get(Uri.parse('https://api.themoviedb.org/3/genre/movie/list?api_key=965bad903c50ad13e17d1c22af35845f'));
+  final response = await http.get(Uri.parse('https://api.themoviedb.org/3/genre/movie/list?api_key=${Secrets.API_KEY}'));
 
   if (response.statusCode == 200) {
     final jsonResponse = json.decode(response.body);
@@ -45,19 +46,58 @@ void main() {
   ));
 }
 
+class MovieProvider with ChangeNotifier {
+  final _client = http.Client();
+  List<dynamic> data = [];
+  int currentPage = 1;
+
+  Future<void> fetchData() async {
+    try {
+      final file = await DefaultCacheManager().getSingleFile("$baseUrl&page=$currentPage");
+      if (file != null && await file.exists()) {
+        final dataFromFile = await file.readAsString();
+        data.addAll(json.decode(dataFromFile)['results']);
+        currentPage++;
+        notifyListeners(); // Notify listeners to update UI
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Future<String> fetchTrailer(int movieId) async {
+    String apiKey = Secrets.API_KEY; // replace with your own API key
+    final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      var result = json.decode(response.body);
+      for (var item in result['results']) {
+        if (item['type'] == 'Trailer' && item['site'] == 'YouTube') {
+          return item['key'];
+        }
+      }
+    }
+
+    return '';
+  }
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TMDB Movie App',
-      theme: ThemeData(
-        primaryColor: Colors.yellow,
-        scaffoldBackgroundColor: Colors.grey[900],
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+    return ChangeNotifierProvider(
+      create: (context) => MovieProvider(),
+      child: MaterialApp(
+        title: 'TMDB Movie App',
+        theme: ThemeData(
+          primaryColor: Colors.yellow,
+          scaffoldBackgroundColor: Colors.grey[900],
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        home: HomePage(),
       ),
-      home: HomePage(),
     );
   }
 }
@@ -363,7 +403,7 @@ class TrailerBuilder extends StatelessWidget {
 
 class MovieService {
   final _client = http.Client();
-  final String apiKey = '965bad903c50ad13e17d1c22af35845f';
+  final String apiKey = Secrets.API_KEY;
   final String baseUrl = 'https://api.themoviedb.org/3';
   Set<int> previousMovieIds;
   MovieService() : previousMovieIds = Set<int>();
@@ -381,7 +421,7 @@ class MovieService {
   }
 
   Future<List<Map<String, dynamic>>> fetchMovieList(int page) async {
-    String apiKey = '965bad903c50ad13e17d1c22af35845f'; // replace with your own API key
+    String apiKey = Secrets.API_KEY; // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/popular?api_key=$apiKey&page=$page'));
 
     if (response.statusCode == 200) {
@@ -660,17 +700,18 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    Provider.of<MovieProvider>(context, listen: false).fetchData();
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels ==
-          _scrollController.position.maxScrollExtent) {
-        fetchData();
+      if (_scrollController.position.atEdge) {
+        if (_scrollController.position.pixels != 0)
+          fetchData();
       }
     });
     fetchData();
   }
 
   Future<String> fetchTrailer(int movieId) async {
-    String apiKey = '965bad903c50ad13e17d1c22af35845f'; // replace with your own API key
+    String apiKey = Secrets.API_KEY; // replace with your own API key
     final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/movie/$movieId/videos?api_key=$apiKey'));
 
     if (response.statusCode == 200) {
@@ -788,7 +829,7 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
     if (randomMovieList != null && randomMovieList.isNotEmpty) {
       // Randomly select a movie from the list
       var randomMovie = randomMovieList[Random().nextInt(randomMovieList.length)];
-      var trailer = await movieService.fetchTrailer(randomMovie['id']);
+      var trailer = await Provider.of<MovieProvider>(context, listen: false).fetchTrailer(randomMovie['id']);
 
       setState(() {
         movie = randomMovie;
@@ -816,7 +857,6 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
     );
   }
 }
-
 
 
 
