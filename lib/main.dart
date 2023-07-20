@@ -91,7 +91,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'TMDB Movie App',
         theme: ThemeData(
-          primaryColor: Colors.yellow,
+          backgroundColor: CupertinoColors.systemYellow,
           scaffoldBackgroundColor: Colors.grey[900],
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
@@ -137,7 +137,7 @@ class MovieDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.yellow,
+        backgroundColor: CupertinoColors.systemYellow,
         foregroundColor: Colors.black,
         title: Text(movie['title']),
       ),
@@ -717,7 +717,7 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    List<String> years = List<String>.generate(DateTime.now().year - 1990 + 1, (i) => (1990 + i).toString());
+    List<String> years = List<String>.generate(DateTime.now().year - 1960 + 1, (i) => (1960 + i).toString());
     years.insert(0, 'All');
 
     return CupertinoPageScaffold(
