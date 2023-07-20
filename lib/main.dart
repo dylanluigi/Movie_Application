@@ -91,7 +91,6 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'TMDB Movie App',
         theme: ThemeData(
-          backgroundColor: CupertinoColors.systemYellow,
           scaffoldBackgroundColor: Colors.grey[900],
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
@@ -723,73 +722,151 @@ class _SearchPageState extends State<SearchPage> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         backgroundColor: CupertinoColors.systemYellow,
-        middle: Text('Search'),
+        middle: Text('Search', style: TextStyle(color: Colors.white)),
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: CupertinoSearchTextField(
-              controller: _controller,
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      child: Container(
+        color: Colors.grey[900],
+        child: SafeArea(
+          child: Column(
             children: [
-              CupertinoButton(
-                child: Text('Genre: $selectedGenre'),
-                onPressed: () => showCupertinoModalPopup(
-                  context: context,
-                  builder: (BuildContext context) => Container(
-                    height: 200,
-                    child: CupertinoPicker(
-                      scrollController: FixedExtentScrollController(
-                        initialItem: genres.indexOf(selectedGenre),
-                      ),
-                      itemExtent: 32.0,
-                      onSelectedItemChanged: (index) {
-                        setState(() {
-                          selectedGenre = genres[index];
-                          currentPage = 1;
-                          data = [];
-                        });
-                      },
-                      children: genres.map((genre) => Text(genre)).toList(),
-                    ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: CupertinoTextField(
+                  controller: _controller,
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(25),
+                    color: Colors.white,
                   ),
+                  prefix: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                    child: Icon(CupertinoIcons.search, color: Colors.grey),
+                  ),
+                  placeholder: 'Search',
+                  placeholderStyle: TextStyle(color: Colors.grey),
                 ),
               ),
-              CupertinoButton(
-                child: Text('Year: $selectedYear'),
-                onPressed: () => showCupertinoModalPopup(
-                  context: context,
-                  builder: (BuildContext context) => Container(
-                    height: 200,
-                    child: CupertinoPicker(
-                      scrollController: FixedExtentScrollController(
-                        initialItem: years.indexOf(selectedYear),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CupertinoButton.filled(
+                      padding: EdgeInsets.zero,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemYellow, // Set the background color to yellow
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(CupertinoIcons.film, size: 20, color: Colors.grey[900]), // Set the color to grey
+                            SizedBox(width: 8),
+                            Text(
+                              'Genre: $selectedGenre',
+                              style: TextStyle(color: Colors.grey[900]), // Set the color to grey
+                            ),
+                          ],
+                        ),
                       ),
-                      itemExtent: 32.0,
-                      onSelectedItemChanged: (index) {
-                        setState(() {
-                          selectedYear = years[index];
-                          currentPage = 1;
-                          data = [];
-                        });
-                      },
-                      children: years.map((year) => Text(year)).toList(),
+                      onPressed: () => showCupertinoModalPopup(
+                        context: context,
+                        builder: (BuildContext context) => Container(
+                          color: Colors.grey[850], // Set the background color of the scroll popup
+                          height: 200,
+                          child: CupertinoPicker(
+                            scrollController: FixedExtentScrollController(
+                              initialItem: genres.indexOf(selectedGenre),
+                            ),
+                            itemExtent: 32.0,
+                            backgroundColor: Colors.grey[850], // Set the background color of the picker
+                            onSelectedItemChanged: (index) {
+                              setState(() {
+                                selectedGenre = genres[index];
+                                currentPage = 1;
+                                data = [];
+                              });
+                            },
+                            children: genres.map((genre) => Text(genre, style: TextStyle(color: Colors.white))).toList(), // Set the text color within the picker
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CupertinoButton.filled(
+                      padding: EdgeInsets.zero,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemYellow, // Set the background color to yellow
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(CupertinoIcons.time, size: 20, color: Colors.grey[900]), // Set the color to grey
+                            SizedBox(width: 8),
+                            Text(
+                              'Year: $selectedYear',
+                              style: TextStyle(color: Colors.grey[900]), // Set the color to grey
+                            ),
+                          ],
+                        ),
+                      ),
+                      onPressed: () => showCupertinoModalPopup(
+                        context: context,
+                        builder: (BuildContext context) => Container(
+                          color: Colors.grey[850], // Set the background color of the scroll popup
+                          height: 200,
+                          child: CupertinoPicker(
+                            scrollController: FixedExtentScrollController(
+                              initialItem: years.indexOf(selectedYear),
+                            ),
+                            itemExtent: 32.0,
+                            backgroundColor: Colors.grey[850], // Set the background color of the picker
+                            onSelectedItemChanged: (index) {
+                              setState(() {
+                                selectedYear = years[index];
+                                currentPage = 1;
+                                data = [];
+                              });
+                            },
+                            children: years.map((year) => Text(year, style: TextStyle(color: Colors.white))).toList(), // Set the text color within the picker
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
 
+              SizedBox(height: 10),
+              Expanded(
+                child: data.length == 0
+                    ? Center(
+                  child: CupertinoActivityIndicator(),
+                )
+                    : MovieGrid(data: data, scrollController: _scrollController),
+              ),
             ],
           ),
-          Expanded(child: MovieGrid(data: data, scrollController: _scrollController)),
-        ],
+        ),
       ),
     );
   }
+
+
+
+
+
+
+
 
 }
 
