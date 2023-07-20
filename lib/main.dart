@@ -8,7 +8,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'secrets.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=${Secrets.API_KEY}';
 const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=${Secrets.API_KEY}&query=';
@@ -54,7 +53,7 @@ class MovieProvider with ChangeNotifier {
   Future<void> fetchData() async {
     try {
       final file = await DefaultCacheManager().getSingleFile("$baseUrl&page=$currentPage");
-      if (file != null && await file.exists()) {
+      if (await file.exists()) {
         final dataFromFile = await file.readAsString();
         data.addAll(json.decode(dataFromFile)['results']);
         currentPage++;
@@ -432,6 +431,23 @@ class MovieService {
     }
   }
 
+  Future<List<String>> fetchGenres2() async {
+    final response = await _client.get(Uri.parse('https://api.themoviedb.org/3/genre/movie/list?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      Map<String, dynamic> json = jsonDecode(response.body);
+      List<dynamic> genresList = json['genres'];
+
+      List<String> genres = [];
+      for (var genre in genresList) {
+        genres.add(genre['name']);
+      }
+      return genres;
+    } else {
+      throw Exception('Failed to load genres');
+    }
+  }
+
 
   Future<Map<String, dynamic>> fetchRandomMovie({String? genre, String? year, String? minimumRating}) async {
     String apiUrl = '$baseUrl/discover/movie?api_key=$apiKey';
@@ -582,51 +598,114 @@ class SearchPage extends StatefulWidget {
   _SearchPageState createState() => _SearchPageState();
 }
 
-class RandomMoviePage extends StatefulWidget {
-  const RandomMoviePage({Key? key}) : super(key: key);
-
-  @override
-  _RandomMoviePageState createState() => _RandomMoviePageState();
-}
-
 class _SearchPageState extends State<SearchPage> {
-  String selectedYear = 'All';  // set default value for year filter to 'All'
-  String selectedGenre = 'All'; // set default value for genre filter to 'All'
+  String _selectedYear = 'All';  // set default value for year filter to 'All'
+  String _selectedGenre = 'All'; // set default value for genre filter to 'All'
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
-  List<dynamic> data = [];
   final ScrollController _scrollController = ScrollController();
+  MovieService movieService = MovieService();
+  List<String> genres = [];
 
-  Future<void> searchMovies(String query) async {
-    try {
-      if (query.isNotEmpty) {
-        final response = await _client.get(Uri.parse("$searchBaseUrl$query"));
-        List<dynamic> allData = json.decode(response.body)['results'];
-
-        // Apply the filters
-        setState(() {
-          data = allData.where((movie) {
-            final releaseYear = movie['release_date'].isNotEmpty ? DateTime.parse(movie['release_date']).year : null;
-            final genreIds = movie['genre_ids'] as List<dynamic>;
-
-            // Checks if the movie's release year is equal or later than the selected year and if the movie's genres contain the selected genre
-            return (selectedYear == 'All' || (releaseYear != null && releaseYear >= int.parse(selectedYear))) &&
-                (selectedGenre == 'All' || genreIds.contains(genreNameToId[selectedGenre]));
-          }).toList();
-        });
-      }
-    } catch (e) {
-      print(e);
+  String get selectedYear => _selectedYear;
+  set selectedYear(String value) {
+    _selectedYear = value;
+    if (_selectedYear == 'All' && _selectedGenre == 'All') {
+      _controller.clear();
     }
+    fetchMovies();
   }
+
+  String get selectedGenre => _selectedGenre;
+  set selectedGenre(String value) {
+    _selectedGenre = value;
+    if (_selectedYear == 'All' && _selectedGenre == 'All') {
+      _controller.clear();
+    }
+    fetchMovies();
+  }
+
+
+  int currentPage = 1;  // Start from the first page
+  int totalPage = 1; // Placeholder for total pages from API
+  List<dynamic> data = [];
 
   @override
   void initState() {
     super.initState();
+    fetchGenreMapping();  // fetch genre ID mappings
+    fetchGenres();
 
     _controller.addListener(() {
-      searchMovies(_controller.text);
+      currentPage = 1;
+      data = [];
+      fetchMovies();
     });
+  }
+
+  Future<void> fetchMovies() async {
+    while (currentPage <= totalPage) {
+      try {
+        String url;
+
+        if (_selectedYear == 'All' && _selectedGenre == 'All') {
+          // If both filters are 'All', fetch movies sorted by popularity
+          url = _controller.text.isEmpty
+              ? 'https://api.themoviedb.org/3/discover/movie?api_key=${Secrets.API_KEY}&sort_by=popularity.desc&page=$currentPage'
+              : '$searchBaseUrl${_controller.text}&sort_by=popularity.desc&page=$currentPage';
+        } else {
+          // If any filter is set, fetch movies based on those filters
+          final String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
+          final String yearParam = _selectedYear != 'All' ? '&primary_release_year=$_selectedYear' : '';
+
+          url = _controller.text.isEmpty
+              ? 'https://api.themoviedb.org/3/discover/movie?api_key=${Secrets.API_KEY}&page=$currentPage$genreParam$yearParam'
+              : '$searchBaseUrl${_controller.text}&page=$currentPage$genreParam$yearParam';
+        }
+
+        final response = await getApiResponse(url);
+
+        if (response != null) {
+          setState(() {
+            data.addAll(response['results']);
+            totalPage = response['total_pages']; // Update total page number
+          });
+        }
+
+        // Check if we have fetched enough data to show
+        if (data.length >= 10) {
+          break;  // Stop fetching more data
+        }
+
+        currentPage++;
+      } catch (e) {
+        print(e);
+      }
+    }
+  }
+
+
+
+  Future<Map<String, dynamic>?> getApiResponse(String url) async {
+    final response = await _client.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      print('Failed to load data');
+      return null;
+    }
+  }
+
+  Future<void> fetchGenres() async {
+    try {
+      final genres = await movieService.fetchGenres2();
+      setState(() {
+        this.genres = genres;
+        this.genres.insert(0, 'All');
+      });
+    } catch (e) {
+      print(e);
+    }
   }
 
   @override
@@ -641,39 +720,10 @@ class _SearchPageState extends State<SearchPage> {
     List<String> years = List<String>.generate(DateTime.now().year - 1990 + 1, (i) => (1990 + i).toString());
     years.insert(0, 'All');
 
-    List<String> genres = genreNameToId.keys.toList();
-    genres.insert(0, 'All');
-
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         backgroundColor: CupertinoColors.systemYellow,
         middle: Text('Search'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CupertinoPicker(
-              itemExtent: 32.0,
-              onSelectedItemChanged: (index) {
-                setState(() {
-                  selectedYear = years[index];
-                  searchMovies(_controller.text);
-                });
-              },
-              children: years.map((year) => Text(year)).toList(),
-            ),
-            SizedBox(width: 8.0),
-            CupertinoPicker(
-              itemExtent: 32.0,
-              onSelectedItemChanged: (index) {
-                setState(() {
-                  selectedGenre = genres[index];
-                  searchMovies(_controller.text);
-                });
-              },
-              children: genres.map((genre) => Text(genre)).toList(),
-            ),
-          ],
-        ),
       ),
       child: Column(
         children: [
@@ -683,11 +733,71 @@ class _SearchPageState extends State<SearchPage> {
               controller: _controller,
             ),
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              CupertinoButton(
+                child: Text('Genre: $selectedGenre'),
+                onPressed: () => showCupertinoModalPopup(
+                  context: context,
+                  builder: (BuildContext context) => Container(
+                    height: 200,
+                    child: CupertinoPicker(
+                      scrollController: FixedExtentScrollController(
+                        initialItem: genres.indexOf(selectedGenre),
+                      ),
+                      itemExtent: 32.0,
+                      onSelectedItemChanged: (index) {
+                        setState(() {
+                          selectedGenre = genres[index];
+                          currentPage = 1;
+                          data = [];
+                        });
+                      },
+                      children: genres.map((genre) => Text(genre)).toList(),
+                    ),
+                  ),
+                ),
+              ),
+              CupertinoButton(
+                child: Text('Year: $selectedYear'),
+                onPressed: () => showCupertinoModalPopup(
+                  context: context,
+                  builder: (BuildContext context) => Container(
+                    height: 200,
+                    child: CupertinoPicker(
+                      scrollController: FixedExtentScrollController(
+                        initialItem: years.indexOf(selectedYear),
+                      ),
+                      itemExtent: 32.0,
+                      onSelectedItemChanged: (index) {
+                        setState(() {
+                          selectedYear = years[index];
+                          currentPage = 1;
+                          data = [];
+                        });
+                      },
+                      children: years.map((year) => Text(year)).toList(),
+                    ),
+                  ),
+                ),
+              ),
+
+            ],
+          ),
           Expanded(child: MovieGrid(data: data, scrollController: _scrollController)),
         ],
       ),
     );
   }
+
+}
+
+class RandomMoviePage extends StatefulWidget {
+  const RandomMoviePage({Key? key}) : super(key: key);
+
+  @override
+  _RandomMoviePageState createState() => _RandomMoviePageState();
 }
 
 class _HomePageState extends State<HomePage> {
@@ -826,17 +936,27 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
     var randomPage = Random().nextInt(500); // 500 can be replaced by the maximum number of pages you know exists in TMDB
     var randomMovieList = await movieService.fetchMovieList(randomPage);
 
-    if (randomMovieList != null && randomMovieList.isNotEmpty) {
+    if (randomMovieList.isNotEmpty) {
       // Randomly select a movie from the list
       var randomMovie = randomMovieList[Random().nextInt(randomMovieList.length)];
-      var trailer = await Provider.of<MovieProvider>(context, listen: false).fetchTrailer(randomMovie['id']);
 
+      // Call separate method to handle the Provider.of() call
+      fetchTrailerAndUpdateState(randomMovie);
+    }
+  }
+
+  void fetchTrailerAndUpdateState(Map<String, dynamic> randomMovie) async {
+    final movieProvider = Provider.of<MovieProvider>(context, listen: false);
+    var trailer = await movieProvider.fetchTrailer(randomMovie['id']);
+
+    if(mounted) {
       setState(() {
         movie = randomMovie;
         trailerKey = trailer;
       });
     }
   }
+
 
 
   @override
@@ -857,6 +977,5 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
     );
   }
 }
-
 
 
