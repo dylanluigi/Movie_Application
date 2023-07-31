@@ -1244,8 +1244,8 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
         middle: const Text('Random Movie'),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: const Icon(CupertinoIcons.shuffle, size: 28),
           onPressed: fetchRandomMovie,
+          child: const Icon(CupertinoIcons.shuffle, size: 28, color: CupertinoColors.darkBackgroundGray,),
         ),
       ),
       child: movie == null
