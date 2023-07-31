@@ -598,49 +598,58 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  String _selectedYear = 'All';  // set default value for year filter to 'All'
-  String _selectedGenre = 'All'; // set default value for genre filter to 'All'
+  String _selectedYear = 'All';
+  String _selectedGenre = 'All';
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
   final ScrollController _scrollController = ScrollController();
   MovieService movieService = MovieService();
   List<String> genres = [];
 
-  String get selectedYear => _selectedYear;
-  set selectedYear(String value) {
-    _selectedYear = value;
-    if (_selectedYear == 'All' && _selectedGenre == 'All') {
-      _controller.clear();
-    }
-    fetchMovies();
-  }
-
-  String get selectedGenre => _selectedGenre;
-  set selectedGenre(String value) {
-    _selectedGenre = value;
-    if (_selectedYear == 'All' && _selectedGenre == 'All') {
-      _controller.clear();
-    }
-    fetchMovies();
-  }
-
-
-  int currentPage = 1;  // Start from the first page
-  int totalPage = 1; // Placeholder for total pages from API
+  int currentPage = 1;
+  int totalPage = 1;
   List<dynamic> data = [];
 
   @override
   void initState() {
     super.initState();
-    fetchGenreMapping();  // fetch genre ID mappings
+    fetchGenreMapping();
     fetchGenres();
 
     _controller.addListener(() {
-      currentPage = 1;
-      data = [];
-      fetchMovies();
+      resetAndFetchMovies();
     });
+
+    fetchMovies();
   }
+
+  String get selectedYear => _selectedYear;
+  set selectedYear(String value) {
+    setSelected(value, _selectedGenre);
+  }
+
+  String get selectedGenre => _selectedGenre;
+  set selectedGenre(String value) {
+    setSelected(_selectedYear, value);
+  }
+
+  void setSelected(String year, String genre) {
+    _selectedYear = year;
+    _selectedGenre = genre;
+
+    if (year == 'All' && genre == 'All') {
+      _controller.clear();
+    }
+    resetAndFetchMovies();
+  }
+
+
+  void resetAndFetchMovies() {
+    currentPage = 1;
+    data = [];
+    fetchMovies();
+  }
+
 
   Future<void> fetchMovies() async {
     while (currentPage <= totalPage) {
@@ -749,103 +758,36 @@ class _SearchPageState extends State<SearchPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: CupertinoButton.filled(
-                      padding: EdgeInsets.zero,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemYellow, // Set the background color to yellow
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(CupertinoIcons.film, size: 20, color: Colors.grey[900]), // Set the color to grey
-                            SizedBox(width: 8),
-                            Text(
-                              'Genre: $selectedGenre',
-                              style: TextStyle(color: Colors.grey[900]), // Set the color to grey
-                            ),
-                          ],
-                        ),
-                      ),
-                      onPressed: () => showCupertinoModalPopup(
-                        context: context,
-                        builder: (BuildContext context) => Container(
-                          color: Colors.grey[850], // Set the background color of the scroll popup
-                          height: 200,
-                          child: CupertinoPicker(
-                            scrollController: FixedExtentScrollController(
-                              initialItem: genres.indexOf(selectedGenre),
-                            ),
-                            itemExtent: 32.0,
-                            backgroundColor: Colors.grey[850], // Set the background color of the picker
-                            onSelectedItemChanged: (index) {
-                              setState(() {
-                                selectedGenre = genres[index];
-                                currentPage = 1;
-                                data = [];
-                              });
-                            },
-                            children: genres.map((genre) => Text(genre, style: TextStyle(color: Colors.white))).toList(), // Set the text color within the picker
-                          ),
-                        ),
-                      ),
-                    ),
+                  FilterButton(
+                    icon: CupertinoIcons.film,
+                    label: 'Genre: $selectedGenre',
+                    options: genres,
+                    selectedIndex: genres.indexOf(selectedGenre),
+                    onSelected: (index) {
+                      setState(() {
+                        selectedGenre = genres[index];
+                        currentPage = 1;
+                        data = [];
+                        fetchMovies();
+                      });
+                    },
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: CupertinoButton.filled(
-                      padding: EdgeInsets.zero,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemYellow, // Set the background color to yellow
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(CupertinoIcons.time, size: 20, color: Colors.grey[900]), // Set the color to grey
-                            SizedBox(width: 8),
-                            Text(
-                              'Year: $selectedYear',
-                              style: TextStyle(color: Colors.grey[900]), // Set the color to grey
-                            ),
-                          ],
-                        ),
-                      ),
-                      onPressed: () => showCupertinoModalPopup(
-                        context: context,
-                        builder: (BuildContext context) => Container(
-                          color: Colors.grey[850], // Set the background color of the scroll popup
-                          height: 200,
-                          child: CupertinoPicker(
-                            scrollController: FixedExtentScrollController(
-                              initialItem: years.indexOf(selectedYear),
-                            ),
-                            itemExtent: 32.0,
-                            backgroundColor: Colors.grey[850], // Set the background color of the picker
-                            onSelectedItemChanged: (index) {
-                              setState(() {
-                                selectedYear = years[index];
-                                currentPage = 1;
-                                data = [];
-                              });
-                            },
-                            children: years.map((year) => Text(year, style: TextStyle(color: Colors.white))).toList(), // Set the text color within the picker
-                          ),
-                        ),
-                      ),
-                    ),
+                  FilterButton(
+                    icon: CupertinoIcons.time,
+                    label: 'Year: $selectedYear',
+                    options: years,
+                    selectedIndex: years.indexOf(selectedYear),
+                    onSelected: (index) {
+                      setState(() {
+                        selectedYear = years[index];
+                        currentPage = 1;
+                        data = [];
+                        fetchMovies();
+                      });
+                    },
                   ),
                 ],
               ),
-
               SizedBox(height: 10),
               Expanded(
                 child: data.length == 0
@@ -861,14 +803,70 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-
-
-
-
-
-
-
 }
+
+class FilterButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final List<String> options;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const FilterButton({
+    Key? key,
+    required this.icon,
+    required this.label,
+    required this.options,
+    required this.selectedIndex,
+    required this.onSelected,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: CupertinoButton.filled(
+        padding: EdgeInsets.zero,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemYellow,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: Colors.grey[900]),
+              SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(color: Colors.grey[900]),
+              ),
+            ],
+          ),
+        ),
+        onPressed: () => showCupertinoModalPopup(
+          context: context,
+          builder: (BuildContext context) => Container(
+            color: Colors.grey[850],
+            height: 200,
+            child: CupertinoPicker(
+              scrollController: FixedExtentScrollController(
+                initialItem: selectedIndex,
+              ),
+              itemExtent: 32.0,
+              backgroundColor: Colors.grey[850],
+              onSelectedItemChanged: onSelected,
+              children: options.map((option) => Text(option, style: TextStyle(color: Colors.white))).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 class RandomMoviePage extends StatefulWidget {
   const RandomMoviePage({Key? key}) : super(key: key);
@@ -1054,5 +1052,4 @@ class _RandomMoviePageState extends State<RandomMoviePage> {
     );
   }
 }
-
 
