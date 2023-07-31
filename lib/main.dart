@@ -8,6 +8,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'secrets.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
 const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=${Secrets.API_KEY}';
 const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=${Secrets.API_KEY}&query=';
@@ -149,6 +150,7 @@ class MovieDetailPage extends StatelessWidget {
             const SizedBox(height: 16.0),
             MovieTitle(movie: movie),
             const SizedBox(height: 8.0),
+
             const Text(
               'Genres:',
               style: TextStyle(
@@ -161,6 +163,8 @@ class MovieDetailPage extends StatelessWidget {
             GenresBuilder(movieService: movieService, movie: movie),
             const SizedBox(height: 16.0),
             MovieReleaseDate(movie: movie),
+            const SizedBox(height: 16.0),
+            MovieRating(movie: movie),
             const SizedBox(height: 16.0),
             MovieOverview(movie: movie),
             const SizedBox(height: 16.0),
@@ -520,6 +524,27 @@ class MovieService {
   }
 }
 
+class MovieRating extends StatelessWidget {
+  final Map<String, dynamic> movie;
+
+  MovieRating({Key? key, required this.movie}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    double rating = (movie['vote_average'] as num).toDouble();
+    return RatingBarIndicator(
+      rating: rating / 2, // because the vote_average is out of 10 and we want it out of 5
+      itemCount: 5,
+      itemSize: 25.0,
+      physics: BouncingScrollPhysics(),
+      itemBuilder: (context, _) => Icon(
+        Icons.star,
+        color: Colors.amber,
+      ),
+    );
+  }
+}
+
 class MovieGrid extends StatelessWidget {
   final List<dynamic> data;
   final ScrollController scrollController;
@@ -600,6 +625,8 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   String _selectedYear = 'All';
   String _selectedGenre = 'All';
+  String _selectedOrder = 'popularity.desc';
+
   final TextEditingController _controller = TextEditingController();
   final _client = http.Client();
   final ScrollController _scrollController = ScrollController();
@@ -656,19 +683,19 @@ class _SearchPageState extends State<SearchPage> {
       try {
         String url;
 
+        // The search and sort parameters of the API request
+        String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
+        String sortParam = _controller.text.isEmpty ? _selectedOrder : 'popularity.desc';
+
         if (_selectedYear == 'All' && _selectedGenre == 'All') {
-          // If both filters are 'All', fetch movies sorted by popularity
-          url = _controller.text.isEmpty
-              ? 'https://api.themoviedb.org/3/discover/movie?api_key=${Secrets.API_KEY}&sort_by=popularity.desc&page=$currentPage'
-              : '$searchBaseUrl${_controller.text}&sort_by=popularity.desc&page=$currentPage';
+          // If both filters are 'All', fetch movies sorted by the selected order
+          url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage';
         } else {
           // If any filter is set, fetch movies based on those filters
           final String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
-          final String yearParam = _selectedYear != 'All' ? '&primary_release_year=$_selectedYear' : '';
+          final String yearParam = _selectedYear != 'All' ? '&release_date.gte=$_selectedYear-01-01&release_date.lte=$_selectedYear-12-31' : '';
 
-          url = _controller.text.isEmpty
-              ? 'https://api.themoviedb.org/3/discover/movie?api_key=${Secrets.API_KEY}&page=$currentPage$genreParam$yearParam'
-              : '$searchBaseUrl${_controller.text}&page=$currentPage$genreParam$yearParam';
+          url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage$genreParam$yearParam';
         }
 
         final response = await getApiResponse(url);
@@ -693,7 +720,6 @@ class _SearchPageState extends State<SearchPage> {
   }
 
 
-
   Future<Map<String, dynamic>?> getApiResponse(String url) async {
     final response = await _client.get(Uri.parse(url));
     if (response.statusCode == 200) {
@@ -703,6 +729,7 @@ class _SearchPageState extends State<SearchPage> {
       return null;
     }
   }
+
 
   Future<void> fetchGenres() async {
     try {
@@ -731,70 +758,165 @@ class _SearchPageState extends State<SearchPage> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         backgroundColor: CupertinoColors.systemYellow,
-        middle: Text('Search', style: TextStyle(color: Colors.white)),
+        middle: Text('Search', style: TextStyle(color: Colors.black)),
       ),
       child: Container(
         color: Colors.grey[900],
         child: SafeArea(
-          child: Column(
+          child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: CupertinoTextField(
-                  controller: _controller,
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(25),
-                    color: Colors.white,
-                  ),
-                  prefix: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                    child: Icon(CupertinoIcons.search, color: Colors.grey),
-                  ),
-                  placeholder: 'Search',
-                  placeholderStyle: TextStyle(color: Colors.grey),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              Column(
                 children: [
-                  FilterButton(
-                    icon: CupertinoIcons.film,
-                    label: 'Genre: $selectedGenre',
-                    options: genres,
-                    selectedIndex: genres.indexOf(selectedGenre),
-                    onSelected: (index) {
-                      setState(() {
-                        selectedGenre = genres[index];
-                        currentPage = 1;
-                        data = [];
-                        fetchMovies();
-                      });
-                    },
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: CupertinoTextField(
+                      controller: _controller,
+                      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(25),
+                        color: Colors.white,
+                      ),
+                      prefix: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                        child: Icon(CupertinoIcons.search, color: Colors.grey),
+                      ),
+                      placeholder: 'Search',
+                      placeholderStyle: TextStyle(color: Colors.grey),
+                    ),
                   ),
-                  FilterButton(
-                    icon: CupertinoIcons.time,
-                    label: 'Year: $selectedYear',
-                    options: years,
-                    selectedIndex: years.indexOf(selectedYear),
-                    onSelected: (index) {
-                      setState(() {
-                        selectedYear = years[index];
-                        currentPage = 1;
-                        data = [];
-                        fetchMovies();
-                      });
-                    },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: FilterButton(
+                              icon: CupertinoIcons.film,
+                              label: 'Genre: $selectedGenre',
+                              options: genres,
+                              selectedIndex: genres.indexOf(selectedGenre),
+                              onSelected: (index) {
+                                setState(() {
+                                  selectedGenre = genres[index];
+                                  currentPage = 1;
+                                  data = [];
+                                  fetchMovies();
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: FilterButton(
+                              icon: CupertinoIcons.time,
+                              label: 'Year: $selectedYear',
+                              options: years,
+                              selectedIndex: years.indexOf(selectedYear),
+                              onSelected: (index) {
+                                setState(() {
+                                  selectedYear = years[index];
+                                  currentPage = 1;
+                                  data = [];
+                                  fetchMovies();
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+
+
+                  SizedBox(height: 10),
+                  Expanded(
+                    child: data.length == 0
+                        ? Center(
+                      child: CupertinoActivityIndicator(),
+                    )
+                        : MovieGrid(data: data, scrollController: _scrollController),
                   ),
                 ],
               ),
-              SizedBox(height: 10),
-              Expanded(
-                child: data.length == 0
-                    ? Center(
-                  child: CupertinoActivityIndicator(),
-                )
-                    : MovieGrid(data: data, scrollController: _scrollController),
+              Positioned(
+                bottom: 16.0,
+                right: 16.0,
+                child: FloatingActionButton(
+                  backgroundColor: CupertinoColors.systemYellow,
+                  foregroundColor: CupertinoColors.darkBackgroundGray,
+                  child: Icon(Icons.filter_list),
+                  onPressed: () {
+                    showCupertinoModalPopup(
+                      context: context,
+                      builder: (BuildContext context) => CupertinoTheme(
+                        data: CupertinoThemeData(
+                          brightness: Brightness.dark,
+                          primaryColor: CupertinoColors.systemYellow,
+                          barBackgroundColor: CupertinoColors.systemGrey6,
+                          textTheme: CupertinoTextThemeData(
+                            actionTextStyle: TextStyle(color: CupertinoColors.systemYellow),
+                          ),
+                        ),
+                        child: CupertinoActionSheet(
+                          title: Text("Choose sorting option"),
+                          actions: [
+                            CupertinoActionSheetAction(
+                              child: Text('Popularity Descending'),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                setState(() {
+                                  _selectedOrder = 'popularity.desc';
+                                  currentPage = 1;
+                                  data = [];
+                                  fetchMovies();
+                                });
+                              },
+                            ),
+                            CupertinoActionSheetAction(
+                              child: Text('Release Date Ascending'),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                setState(() {
+                                  _selectedOrder = 'primary_release_date.asc';
+                                  currentPage = 1;
+                                  data = [];
+                                  fetchMovies();
+                                });
+                              },
+                            ),
+                            CupertinoActionSheetAction(
+                              child: Text('Rating Descending'),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                setState(() {
+                                  _selectedOrder = 'vote_average.desc';
+                                  currentPage = 1;
+                                  data = [];
+                                  fetchMovies();
+                                });
+                              },
+                            ),
+                          ],
+                          cancelButton: CupertinoActionSheetAction(
+                            child: Text("Cancel"),
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
               ),
             ],
           ),
@@ -803,6 +925,14 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+
+
+}
+
+extension StringExtension on String {
+  String capitalize() {
+    return this.split(' ').map((word) => word[0].toUpperCase() + word.substring(1)).join(' ');
+  }
 }
 
 class FilterButton extends StatelessWidget {
@@ -866,7 +996,6 @@ class FilterButton extends StatelessWidget {
     );
   }
 }
-
 
 class RandomMoviePage extends StatefulWidget {
   const RandomMoviePage({Key? key}) : super(key: key);
