@@ -111,16 +111,19 @@ class HomePage extends StatefulWidget {
 class Actor {
   final String name;
   final String imageUrl;
+  final int id; // Add this line
 
   Actor({
     required this.name,
     required this.imageUrl,
+    required this.id, // And this line
   });
 
   factory Actor.fromJson(Map<String, dynamic> json) {
     return Actor(
       name: json['name'],
-      imageUrl: 'https://image.tmdb.org/t/p/w500/${json["profile_path"]}',
+      imageUrl: 'https://image.tmdb.org/t/p/w500${json['profile_path']}',
+      id: json['id'], // And this line
     );
   }
 }
@@ -314,6 +317,37 @@ class MovieOverview extends StatelessWidget {
   }
 }
 
+class ActorDetailPage extends StatelessWidget {
+  final int actorId;
+  final MovieService movieService = MovieService();
+
+  ActorDetailPage({Key? key, required this.actorId}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Actor Detail'),
+        foregroundColor: CupertinoColors.darkBackgroundGray,
+        backgroundColor: CupertinoColors.systemYellow,
+      ),
+      body: FutureBuilder(
+        future: movieService.getActorMovies(actorId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          } else {
+            List<dynamic> movies = snapshot.data ?? [];
+            return MovieGrid(data: movies, scrollController: ScrollController());
+          }
+        },
+      ),
+    );
+  }
+}
+
 class ActorsBuilder extends StatelessWidget {
   const ActorsBuilder({
     Key? key,
@@ -340,23 +374,33 @@ class ActorsBuilder extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               itemCount: actors.length,
               itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(actors[index].imageUrl),
-                        radius: 40,
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ActorDetailPage(actorId: actors[index].id),
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        actors[index].name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          backgroundImage: NetworkImage(actors[index].imageUrl),
+                          radius: 40,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 5),
+                        Text(
+                          actors[index].name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -409,6 +453,36 @@ class MovieService {
   final String baseUrl = 'https://api.themoviedb.org/3';
   Set<int> previousMovieIds;
   MovieService() : previousMovieIds = Set<int>();
+
+  Future<List<dynamic>> getActorMovies(int actorId) async {
+    var response = await http.get(
+      Uri.parse('https://api.themoviedb.org/3/person/$actorId/movie_credits?api_key=$apiKey'),
+    );
+
+    if (response.statusCode == 200) {
+      var jsonResponse = json.decode(response.body);
+      return jsonResponse['cast'].toList();
+    } else {
+      throw Exception('Failed to load actor movies');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchMovieDetailById(int id) async {
+    final response = await _client.get(Uri.parse('$baseUrl/movie/$id?api_key=$apiKey'));
+
+    if (response.statusCode == 200) {
+      Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+
+      // fetch genres
+      var genres = await fetchGenres(id);
+      jsonResponse['genres'] = genres;
+
+      return jsonResponse;
+    } else {
+      throw Exception('Failed to load movie detail');
+    }
+  }
+
 
   Future<List<String>> fetchGenres(int movieId) async {
     final response = await http.get(Uri.parse('$baseUrl/movie/$movieId?api_key=$apiKey'));
@@ -511,17 +585,16 @@ class MovieService {
   }
 
   Future<List<Actor>> fetchActors(int movieId) async {
-    final response = await http.get(Uri.parse('$baseUrl/movie/$movieId/credits?api_key=$apiKey'));
-
+    var response = await _client.get(Uri.parse('$baseUrl/movie/$movieId/credits?api_key=$apiKey'));
     if (response.statusCode == 200) {
-      var jsonResponse = jsonDecode(response.body);
-      List<dynamic> jsonActors = jsonResponse['cast'];
-
-      return jsonActors.map((json) => Actor.fromJson(json)).toList();
+      var data = json.decode(response.body);
+      List<dynamic> castJson = data['cast'];
+      return castJson.map((json) => Actor.fromJson(json)).toList();
     } else {
       throw Exception('Failed to load actors');
     }
   }
+
 }
 
 class MovieRating extends StatelessWidget {
