@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'secrets.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 const baseUrl = 'https://api.themoviedb.org/3/movie/popular?api_key=${Secrets.API_KEY}';
 const searchBaseUrl = 'https://api.themoviedb.org/3/search/movie?api_key=${Secrets.API_KEY}&query=';
@@ -41,6 +42,8 @@ class CustomCacheManager extends CacheManager with ImageCacheManager {
 }
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MobileAds.instance.initialize();
   runApp(MaterialApp(
     home: MyApp(),
   ));
@@ -618,11 +621,71 @@ class MovieRating extends StatelessWidget {
   }
 }
 
-class MovieGrid extends StatelessWidget {
+class MovieGrid extends StatefulWidget {
   final List<dynamic> data;
   final ScrollController scrollController;
 
-  const MovieGrid({required this.data, required this.scrollController});
+  MovieGrid({required this.data, required this.scrollController});
+
+  @override
+  _MovieGridState createState() => _MovieGridState();
+}
+
+class _MovieGridState extends State<MovieGrid> {
+  BannerAd? myBanner;
+  bool _isLoaded = false;
+  AdSize? _adSize;
+  late Orientation _currentOrientation;
+
+  double get _adWidth => MediaQuery.of(context).size.width;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _currentOrientation = MediaQuery.of(context).orientation;
+    _loadAd();
+  }
+
+  void _loadAd() async {
+    await myBanner?.dispose();
+
+    setState(() {
+      myBanner = null;
+      _isLoaded = false;
+    });
+
+    AdSize size = AdSize.getCurrentOrientationInlineAdaptiveBannerAdSize(_adWidth.truncate());
+
+    myBanner = BannerAd(
+      adUnitId: 'ca-app-pub-3940256099942544/9214589741',
+      size: size,
+      request: AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (Ad ad) async {
+          print('Inline adaptive banner loaded: ${ad.responseInfo}');
+
+          BannerAd bannerAd = ad as BannerAd;
+          final AdSize? size = await bannerAd.getPlatformAdSize();
+          if (size == null) {
+            print('Error: getPlatformAdSize() returned null for $bannerAd');
+            return;
+          }
+
+          setState(() {
+            myBanner = bannerAd;
+            _isLoaded = true;
+            _adSize = size;
+          });
+        },
+        onAdFailedToLoad: (Ad ad, LoadAdError error) {
+          print('Inline adaptive banner failedToLoad: $error');
+          ad.dispose();
+        },
+      ),
+    );
+
+    await myBanner!.load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -630,25 +693,48 @@ class MovieGrid extends StatelessWidget {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 1,
       ),
-      controller: scrollController,
-      itemCount: data.length,
+      controller: widget.scrollController,
+      itemCount: widget.data.length,
       itemBuilder: (BuildContext context, int index) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MovieDetailPage(
-                  movie: data[index],
-                  trailerKey: MovieService().fetchTrailer(data[index]['id']),
-                ),
-              ),
+        if (index % 5 == 0 && index != 0) {  // Display ad every 5 movies
+          if (_currentOrientation == MediaQuery.of(context).orientation &&
+              myBanner != null &&
+              _isLoaded &&
+              _adSize != null) {
+            return Container(
+              child: AdWidget(ad: myBanner!),
+              width: _adWidth,
+              height: _adSize!.height.toDouble(),
             );
-          },
-          child: MovieCard(movie: data[index]),
-        );
+          } else if (_currentOrientation != MediaQuery.of(context).orientation) {
+            _currentOrientation = MediaQuery.of(context).orientation;
+            _loadAd();
+          }
+          return Container();
+        } else {
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MovieDetailPage(
+                    movie: widget.data[index],
+                    trailerKey: MovieService().fetchTrailer(widget.data[index]['id']),
+                  ),
+                ),
+              );
+            },
+            child: MovieCard(movie: widget.data[index]),
+          );
+        }
       },
     );
+  }
+
+  @override
+  void dispose() {
+    myBanner?.dispose();
+    super.dispose();
   }
 }
 
