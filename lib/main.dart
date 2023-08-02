@@ -838,45 +838,99 @@ class _SearchPageState extends State<SearchPage> {
 
 
   Future<void> fetchMovies() async {
-    while (currentPage <= totalPage) {
-      try {
-        String url;
+    currentPage = 1;
+    totalPage = 1;
+    data = [];
 
-        // The search and sort parameters of the API request
-        String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
-        String sortParam = _controller.text.isEmpty ? _selectedOrder : 'popularity.desc';
+    try {
+      String url;
+      String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
+      String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
+      String yearParam = _selectedYear != 'All' ? '&primary_release_year=$_selectedYear' : '';
 
-        if (_selectedYear == 'All' && _selectedGenre == 'All') {
-          // If both filters are 'All', fetch movies sorted by the selected order
-          url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage';
-        } else {
-          // If any filter is set, fetch movies based on those filters
-          final String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
-          final String yearParam = _selectedYear != 'All' ? '&release_date.gte=$_selectedYear-01-01&release_date.lte=$_selectedYear-12-31' : '';
-
-          url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage$genreParam$yearParam';
-        }
-
-        final response = await getApiResponse(url);
-
-        if (response != null) {
-          setState(() {
-            data.addAll(response['results']);
-            totalPage = response['total_pages']; // Update total page number
-          });
-        }
-
-        // Check if we have fetched enough data to show
-        if (data.length >= 10) {
-          break;  // Stop fetching more data
-        }
-
-        currentPage++;
-      } catch (e) {
-        print(e);
+      if (_controller.text.isNotEmpty) {
+        // If a search query is provided, add it to the URL
+        String encodedQuery = Uri.encodeComponent(_controller.text);
+        url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&query=$encodedQuery&sort_by=$_selectedOrder&page=$currentPage$genreParam$yearParam';
+      } else {
+        // Otherwise, use the existing logic for discovering movies
+        url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$_selectedOrder&page=$currentPage$genreParam$yearParam';
       }
+
+      final response = await getApiResponse(url);
+
+      if (response != null) {
+        var results = response['results'] as List;
+
+        // If a search query is provided, sort the results manually
+        if (_controller.text.isNotEmpty) {
+          switch (_selectedOrder) {
+            case 'popularity.desc':
+              results.sort((a, b) => b['popularity'].compareTo(a['popularity']));
+              break;
+            case 'primary_release_date.asc':
+              results.sort((a, b) => a['release_date'].compareTo(b['release_date']));
+              break;
+            case 'vote_average.desc':
+              results.sort((a, b) => b['vote_average'].compareTo(a['vote_average']));
+              break;
+          }
+        }
+
+        setState(() {
+          data.addAll(results);
+          totalPage = response['total_pages'];
+        });
+      }
+    } catch (e) {
+      print(e);
     }
   }
+
+
+
+
+
+  // Future<void> fetchMovies() async {
+  //   while (currentPage <= totalPage) {
+  //     try {
+  //       String url;
+  //
+  //       // The search and sort parameters of the API request
+  //       String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
+  //       String sortParam = _controller.text.isEmpty ? _selectedOrder : 'popularity.desc';
+  //
+  //       if (_selectedYear == 'All' && _selectedGenre == 'All') {
+  //         // If both filters are 'All', fetch movies sorted by the selected order
+  //         url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage';
+  //       } else {
+  //         // If any filter is set, fetch movies based on those filters
+  //         final String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
+  //         final String yearParam = _selectedYear != 'All' ? '&release_date.gte=$_selectedYear-01-01&release_date.lte=$_selectedYear-12-31' : '';
+  //
+  //         url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage$genreParam$yearParam';
+  //       }
+  //
+  //       final response = await getApiResponse(url);
+  //
+  //       if (response != null) {
+  //         setState(() {
+  //           data.addAll(response['results']);
+  //           totalPage = response['total_pages']; // Update total page number
+  //         });
+  //       }
+  //
+  //       // Check if we have fetched enough data to show
+  //       if (data.length >= 10) {
+  //         break;  // Stop fetching more data
+  //       }
+  //
+  //       currentPage++;
+  //     } catch (e) {
+  //       print(e);
+  //     }
+  //   }
+  // }
 
 
   Future<Map<String, dynamic>?> getApiResponse(String url) async {
@@ -997,9 +1051,13 @@ class _SearchPageState extends State<SearchPage> {
 
                   SizedBox(height: 10),
                   Expanded(
-                    child: data.length == 0
+                    child: data.isEmpty
                         ? Center(
-                      child: CupertinoActivityIndicator(),
+                      child: Text(
+                        "No movies have been found matching these filters.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
                     )
                         : MovieGrid(data: data, scrollController: _scrollController),
                   ),
