@@ -811,12 +811,21 @@ class _SearchPageState extends State<SearchPage> {
 
   String get selectedYear => _selectedYear;
   set selectedYear(String value) {
-    setSelected(value, _selectedGenre);
+    _selectedYear = value;
+    resetAndFetchMovies();
   }
 
   String get selectedGenre => _selectedGenre;
   set selectedGenre(String value) {
-    setSelected(_selectedYear, value);
+    _selectedGenre = value;
+    resetAndFetchMovies();
+  }
+
+  // Reset and fetch movies based on filter changes
+  void resetAndFetchMovies() {
+    currentPage = 1;
+    data = [];
+    fetchMovies();
   }
 
   void setSelected(String year, String genre) {
@@ -830,56 +839,36 @@ class _SearchPageState extends State<SearchPage> {
   }
 
 
-  void resetAndFetchMovies() {
-    currentPage = 1;
-    data = [];
-    fetchMovies();
-  }
 
-
-  Future<void> fetchMovies() async {
+  Future<void> fetchMovies({String order = 'popularity.desc'}) async {
     currentPage = 1;
     totalPage = 1;
     data = [];
 
     try {
-      String url;
+      String baseUrl = 'https://api.themoviedb.org/3';
       String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
       String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
       String yearParam = _selectedYear != 'All' ? '&primary_release_year=$_selectedYear' : '';
+      String queryParam = _controller.text.isNotEmpty ? '&query=${Uri.encodeComponent(_controller.text)}' : '';
+      String sortByParam = _controller.text.isEmpty ? '&sort_by=$_selectedOrder' : '';
 
-      if (_controller.text.isNotEmpty) {
-        // If a search query is provided, add it to the URL
-        String encodedQuery = Uri.encodeComponent(_controller.text);
-        url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&query=$encodedQuery&sort_by=$_selectedOrder&page=$currentPage$genreParam$yearParam';
-      } else {
-        // Otherwise, use the existing logic for discovering movies
-        url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$_selectedOrder&page=$currentPage$genreParam$yearParam';
-      }
+      // Construct the URL
+      String url = '$baseUrl/$searchParam/movie?api_key=${Secrets.API_KEY}&page=$currentPage$genreParam$yearParam$queryParam$sortByParam';
 
-      final response = await getApiResponse(url);
+      final response = await _client.get(Uri.parse(url));
 
-      if (response != null) {
-        var results = response['results'] as List;
+      if (response != null && response.statusCode == 200) {
+        var results = (json.decode(response.body)['results'] as List).cast<Map<String, dynamic>>();
 
-        // If a search query is provided, sort the results manually
+
         if (_controller.text.isNotEmpty) {
-          switch (_selectedOrder) {
-            case 'popularity.desc':
-              results.sort((a, b) => b['popularity'].compareTo(a['popularity']));
-              break;
-            case 'primary_release_date.asc':
-              results.sort((a, b) => a['release_date'].compareTo(b['release_date']));
-              break;
-            case 'vote_average.desc':
-              results.sort((a, b) => b['vote_average'].compareTo(a['vote_average']));
-              break;
-          }
+          results = _sortMovies(results, order);
         }
 
         setState(() {
           data.addAll(results);
-          totalPage = response['total_pages'];
+          totalPage = json.decode(response.body)['total_pages'];
         });
       }
     } catch (e) {
@@ -887,51 +876,24 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-
-
-
-
-  // Future<void> fetchMovies() async {
-  //   while (currentPage <= totalPage) {
-  //     try {
-  //       String url;
-  //
-  //       // The search and sort parameters of the API request
-  //       String searchParam = _controller.text.isEmpty ? 'discover' : 'search';
-  //       String sortParam = _controller.text.isEmpty ? _selectedOrder : 'popularity.desc';
-  //
-  //       if (_selectedYear == 'All' && _selectedGenre == 'All') {
-  //         // If both filters are 'All', fetch movies sorted by the selected order
-  //         url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage';
-  //       } else {
-  //         // If any filter is set, fetch movies based on those filters
-  //         final String genreParam = _selectedGenre != 'All' ? '&with_genres=${genreNameToId[_selectedGenre]}' : '';
-  //         final String yearParam = _selectedYear != 'All' ? '&release_date.gte=$_selectedYear-01-01&release_date.lte=$_selectedYear-12-31' : '';
-  //
-  //         url = 'https://api.themoviedb.org/3/$searchParam/movie?api_key=${Secrets.API_KEY}&sort_by=$sortParam&page=$currentPage$genreParam$yearParam';
-  //       }
-  //
-  //       final response = await getApiResponse(url);
-  //
-  //       if (response != null) {
-  //         setState(() {
-  //           data.addAll(response['results']);
-  //           totalPage = response['total_pages']; // Update total page number
-  //         });
-  //       }
-  //
-  //       // Check if we have fetched enough data to show
-  //       if (data.length >= 10) {
-  //         break;  // Stop fetching more data
-  //       }
-  //
-  //       currentPage++;
-  //     } catch (e) {
-  //       print(e);
-  //     }
-  //   }
-  // }
-
+  List<Map<String, dynamic>> _sortMovies(List<Map<String, dynamic>> movies, String order) {
+    switch (order) {
+      case 'popularity.desc':
+        movies.sort((a, b) => b['popularity'].compareTo(a['popularity']));
+        break;
+      case 'primary_release_date.asc':
+        movies.sort((a, b) {
+          if (a['release_date'] == null) return 1;
+          if (b['release_date'] == null) return -1;
+          return a['release_date'].compareTo(b['release_date']);
+        });
+        break;
+      case 'vote_average.desc':
+        movies.sort((a, b) => b['vote_average'].compareTo(a['vote_average']));
+        break;
+    }
+    return movies;
+  }
 
   Future<Map<String, dynamic>?> getApiResponse(String url) async {
     final response = await _client.get(Uri.parse(url));
@@ -1085,16 +1047,15 @@ class _SearchPageState extends State<SearchPage> {
                         child: CupertinoActionSheet(
                           title: Text("Choose sorting option"),
                           actions: [
+                            // The sorting options. For simplicity, you can map these into a loop in the future
                             CupertinoActionSheetAction(
                               child: Text('Popularity Descending'),
                               onPressed: () {
                                 Navigator.pop(context);
                                 setState(() {
                                   _selectedOrder = 'popularity.desc';
-                                  currentPage = 1;
-                                  data = [];
-                                  fetchMovies();
                                 });
+                                resetAndFetchMovies();
                               },
                             ),
                             CupertinoActionSheetAction(
@@ -1103,10 +1064,8 @@ class _SearchPageState extends State<SearchPage> {
                                 Navigator.pop(context);
                                 setState(() {
                                   _selectedOrder = 'primary_release_date.asc';
-                                  currentPage = 1;
-                                  data = [];
-                                  fetchMovies();
                                 });
+                                resetAndFetchMovies();
                               },
                             ),
                             CupertinoActionSheetAction(
@@ -1115,10 +1074,8 @@ class _SearchPageState extends State<SearchPage> {
                                 Navigator.pop(context);
                                 setState(() {
                                   _selectedOrder = 'vote_average.desc';
-                                  currentPage = 1;
-                                  data = [];
-                                  fetchMovies();
                                 });
+                                resetAndFetchMovies();
                               },
                             ),
                           ],
